@@ -2,15 +2,36 @@
   "name": "streamx-studio",
   "version": "0.1.0",
   "description": "STREAMX STUDIO — desktop creator workspace",
+  "author": "STREAMX STUDIO",
   "main": "main.js",
-  "scripts": { "start": "electron .", "dist": "electron-builder --win nsis" },
-  "dependencies": { "obs-websocket-js": "^5.0.6" },
-  "devDependencies": { "electron": "^35.0.0", "electron-builder": "^26.0.12" },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --publish never"
+  },
+  "dependencies": {
+    "obs-websocket-js": "^5.0.6"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.12"
+  },
   "build": {
     "appId": "studio.streamx.desktop",
     "productName": "STREAMX STUDIO",
-    "files": ["main.js", "preload.js", "index.html", "styles.css", "renderer.js", "package.json"],
-    "win": { "target": "nsis" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "styles.css",
+      "renderer.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

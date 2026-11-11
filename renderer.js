@@ -2,12 +2,43 @@ const $=id=>document.getElementById(id);
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>show(b.dataset.page));
 document.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>show(b.dataset.jump));
 function show(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===id));$('crumb').textContent=({overview:'Обзор',obs:'OBS Studio',audio:'Микрофон и звук',chat:'Центр чата',donations:'Донаты',thumb:'Дизайн обложек',ai:'AI-помощник',plugins:'Плагины',games:'Интерактив'})[id]||id}
-let obs=null;
-async function connectOBS(){const {default:OBSWebSocket}=await import('obs-websocket-js');obs=new OBSWebSocket();$('obs-message').textContent='Подключение...';try{await obs.connect('ws://'+$('obs-host').value+':'+$('obs-port').value,$('obs-password').value||undefined);$('obs-badge').textContent='CONNECTED';$('obs-overview');$('overview-obs').textContent='Подключено';$('obs-connect').disabled=true;$('obs-disconnect').disabled=false;$('stream-start').disabled=false;$('stream-stop').disabled=false;$('obs-message').textContent='Успешное подключение';await refreshScenes();await refreshStream();obs.on('CurrentProgramSceneChanged',refreshScenes);obs.on('StreamStateChanged',refreshStream)}catch(e){$('obs-message').textContent='Ошибка: '+e.message;obs=null}}
-async function refreshScenes(){if(!obs)return;try{const d=await obs.call('GetSceneList');$('scene-list').innerHTML='';d.scenes.forEach(s=>{const row=document.createElement('div');row.className='scene-row';const name=document.createElement('span');name.textContent=s.sceneName;const btn=document.createElement('button');btn.textContent=s.sceneName===d.currentProgramSceneName?'АКТИВНАЯ':'ВКЛЮЧИТЬ';btn.disabled=s.sceneName===d.currentProgramSceneName;btn.onclick=()=>obs.call('SetCurrentProgramScene',{sceneName:s.sceneName});row.append(name,btn);$('scene-list').append(row)})}catch(e){$('scene-list').textContent='Не удалось загрузить сцены'}}
-async function refreshStream(){if(!obs)return;try{const d=await obs.call('GetStreamStatus');$('live-text').textContent=d.outputActive?'Эфир запущен':'Эфир не запущен'}catch{}}
-$('obs-connect').onclick=connectOBS;$('obs-disconnect').onclick=async()=>{try{await obs.disconnect()}catch{}obs=null;$('obs-badge').textContent='OFFLINE';$('overview-obs').textContent='Не подключено';$('obs-connect').disabled=false;$('obs-disconnect').disabled=true;$('stream-start').disabled=true;$('stream-stop').disabled=true;$('scene-list').textContent='Сначала подключи OBS';$('obs-message').textContent='Отключено'};
-$('stream-start').onclick=async()=>{try{await obs.call('StartStream');await refreshStream()}catch(e){$('obs-message').textContent=e.message}};$('stream-stop').onclick=async()=>{try{await obs.call('StopStream');await refreshStream()}catch(e){$('obs-message').textContent=e.message}};
+let obsConnected=false;
+async function connectOBS(){
+  $('obs-message').textContent='Подключение...';$('obs-connect').disabled=true;
+  try{
+    await window.streamx.obsConnect({host:$('obs-host').value.trim()||'127.0.0.1',port:Number($('obs-port').value)||4455,password:$('obs-password').value});
+    obsConnected=true;$('obs-badge').textContent='CONNECTED';$('overview-obs').textContent='Подключено';
+    $('obs-disconnect').disabled=false;$('stream-start').disabled=false;$('stream-stop').disabled=false;
+    $('obs-message').textContent='Успешное подключение';await refreshScenes();await refreshStream();
+  }catch(e){obsConnected=false;$('obs-connect').disabled=false;$('obs-message').textContent='Ошибка: '+(e.message||String(e))}
+}
+async function refreshScenes(){
+  if(!obsConnected)return;
+  try{
+    const d=await window.streamx.obsRequest('GetSceneList');$('scene-list').innerHTML='';
+    d.scenes.forEach(s=>{
+      const row=document.createElement('div');row.className='scene-row';
+      const name=document.createElement('span');name.textContent=s.sceneName;
+      const btn=document.createElement('button');btn.textContent=s.sceneName===d.currentProgramSceneName?'АКТИВНАЯ':'ВКЛЮЧИТЬ';
+      btn.disabled=s.sceneName===d.currentProgramSceneName;
+      btn.onclick=async()=>{try{await window.streamx.obsRequest('SetCurrentProgramScene',{sceneName:s.sceneName});await refreshScenes()}catch(e){$('obs-message').textContent=e.message}};
+      row.append(name,btn);$('scene-list').append(row);
+    });
+  }catch(e){$('scene-list').textContent='Не удалось загрузить сцены: '+e.message}
+}
+async function refreshStream(){
+  if(!obsConnected)return;
+  try{const d=await window.streamx.obsRequest('GetStreamStatus');$('live-text').textContent=d.outputActive?'Эфир запущен':'Эфир не запущен'}catch(e){$('obs-message').textContent=e.message}
+}
+$('obs-connect').onclick=connectOBS;
+$('obs-disconnect').onclick=async()=>{
+  try{await window.streamx.obsDisconnect()}catch(e){$('obs-message').textContent=e.message}
+  obsConnected=false;$('obs-badge').textContent='OFFLINE';$('overview-obs').textContent='Не подключено';
+  $('obs-connect').disabled=false;$('obs-disconnect').disabled=true;$('stream-start').disabled=true;$('stream-stop').disabled=true;
+  $('scene-list').textContent='Сначала подключи OBS';$('obs-message').textContent='Отключено';
+};
+$('stream-start').onclick=async()=>{try{await window.streamx.obsRequest('StartStream');await refreshStream()}catch(e){$('obs-message').textContent=e.message}};
+$('stream-stop').onclick=async()=>{try{await window.streamx.obsRequest('StopStream');await refreshStream()}catch(e){$('obs-message').textContent=e.message}};
 let micStream=null,audioCtx=null,frame=null;
 $('mic-start').onclick=async()=>{try{micStream=await navigator.mediaDevices.getUserMedia({audio:true});const devices=await navigator.mediaDevices.enumerateDevices();$('mic-select').innerHTML='';devices.filter(d=>d.kind==='audioinput').forEach(d=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||'Микрофон';$('mic-select').append(o)});audioCtx=new AudioContext();const analyser=audioCtx.createAnalyser();analyser.fftSize=512;audioCtx.createMediaStreamSource(micStream).connect(analyser);const data=new Uint8Array(analyser.frequencyBinCount);$('mic-badge').textContent='ACTIVE';$('mic-start').disabled=true;$('mic-stop').disabled=false;const tick=()=>{analyser.getByteTimeDomainData(data);let sum=0;for(const v of data){const x=(v-128)/128;sum+=x*x}const pct=Math.min(100,Math.round(Math.sqrt(sum/data.length)*240));$('meter-fill').style.width=pct+'%';$('meter-value').textContent=pct+'%';frame=requestAnimationFrame(tick)};tick()}catch(e){$('mic-badge').textContent='NO ACCESS';alert('Не удалось получить доступ к микрофону: '+e.message)}};
 $('mic-stop').onclick=()=>{if(frame)cancelAnimationFrame(frame);if(micStream)micStream.getTracks().forEach(t=>t.stop());if(audioCtx)audioCtx.close();micStream=null;audioCtx=null;$('mic-badge').textContent='NOT ACTIVE';$('mic-start').disabled=false;$('mic-stop').disabled=true;$('meter-fill').style.width='0%';$('meter-value').textContent='0%'};

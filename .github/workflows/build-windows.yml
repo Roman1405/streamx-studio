@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - '**'
 
 permissions:
   contents: read
@@ -16,14 +14,28 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install dependencies
         run: npm install
+
       - name: Build Windows installer
-        run: npm run dist
+        run: npx electron-builder --win nsis --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Verify installer exists
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path dist -Filter "*.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "Installer EXE was not created." }
+          Write-Host "Created installer: $($installer.FullName)"
+          Write-Host "Size: $([math]::Round($installer.Length / 1MB, 2)) MB"
+
       - name: Upload EXE installer
         uses: actions/upload-artifact@v4
         with:
